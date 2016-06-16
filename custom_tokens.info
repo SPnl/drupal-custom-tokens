@@ -1,0 +1,3 @@
+name = Custom tokens
+core = 7.x
+dependencies[] = token:token

@@ -1,0 +1,124 @@
+<?php
+
+function custom_tokens_cron() {
+}
+
+function custom_tokens_token_info() {
+  $info['tokens']['current-page']['encoded-url'] = array(
+    'name' => t('Encoded URL'),
+    'description' => t('Encoded URL of the current page.'),
+  );
+  $info['tokens']['current-page']['encoded-title'] = array(
+    'name' => t('Encoded title'),
+    'description' => t('Encoded title of the current page.'),
+  );
+
+  $info['types']['custom'] = array(
+    'name' => t('Custom tokens'),
+    'description' => t('Custom tokens.'),
+  );
+  $webform_ids = custom_tokens_get_webform_ids();
+  foreach ($webform_ids as $webform_id) {
+    $info['tokens']['custom']['webform_submission_count_' . $webform_id] = array(
+      'name' => t('Webform submissions ' . $webform_id),
+      'description' => t('Number of webform submissions form id ' . $webform_id),
+    );
+  }
+  return $info;
+}
+
+function custom_tokens_tokens($type, $tokens, array $data = array(), array $options = array()) {
+  $replacements = array();
+  $sanitize = !empty($options['sanitize']);
+
+  $url_options = array('absolute' => TRUE);
+  if (isset($options['language'])) {
+    $url_options['language'] = $options['language'];
+    $language_code = $options['language']->language;
+  }
+  else {
+    $language_code = NULL;
+  }
+
+  switch ($type) { 
+  case 'current-page':
+    $current_path = current_path();
+    $current_title = drupal_get_title();
+    foreach ($tokens as $name => $original) {
+      switch ($name) {
+        case 'encoded-url':
+          $replacements[$original] = urlencode(url($current_path, $url_options));
+          break;
+        case 'encoded-title':
+          $replacements[$original] = urlencode($current_title);
+          break;
+      }
+    }
+    break;
+  case 'custom':
+    $counts = custom_tokens_get_webform_submissions_counts(); 
+    foreach ($tokens as $name => $original) {
+      preg_match('/^webform_submission_count_([0-9]+)$/', $name, $matches);
+      if (!empty($matches[1]) && !empty($counts[$matches[1]])) {
+        $replacements[$original] = $counts[$matches[1]];
+      }
+    }
+    break;
+  }
+  return $replacements;
+}
+
+function custom_tokens_get_webform_ids() {
+  $webform_ids = &drupal_static(__FUNCTION__);
+  if (!isset($webform_ids)) {
+    if ($cache = cache_get('custom_tokens_webform_ids')) {
+      $webform_ids = $cache->data;
+    }
+    else {
+      $webform_node_types = webform_variable_get('webform_node_types');
+      $webform_ids = array();
+      $query = new EntityFieldQuery();
+
+      $result = $query
+        ->entityCondition('entity_type', 'node')
+        ->entityCondition('bundle', $webform_node_types, 'IN')
+        ->execute();
+
+      if (!empty($result['node'])) {
+        $webform_ids = array_keys($result['node']);
+        cache_set('custom_tokens_webform_ids', $webform_ids, 'cache', time() + 360);
+      }
+    }
+  }
+  return $webform_ids;
+}
+
+function custom_tokens_get_webform_submissions_counts() {
+  $counts = &drupal_static(__FUNCTION__);
+  if (!isset($counts)) {
+    if ($cache = cache_get('custom_tokens_counts')) {
+      $counts = $cache->data;
+    }
+    else {
+      $counts = array();
+      $webform_ids = custom_tokens_get_webform_ids();
+      $query = "SELECT COUNT(*) FROM {webform_submissions} WHERE nid = :nid AND submitted IS NOT NULL";
+      foreach ($webform_ids as $webform_id) {
+        $result = db_query($query, array(':nid' => $webform_id));
+        $count = $result->fetchField(0);
+        if ($count > 100 && $count < 1000) {
+          $count = 10 * (round($count/10));
+        }
+        else if ($count > 1000 && $count < 10000) {
+          $count = 100 * (round($count/100));
+        }
+        else if ($count > 10000) {
+          $count = 1000 * (round($count/1000));
+        }
+        $counts[$webform_id] = $count;
+        cache_set('custom_tokens_counts', $counts, 'cache', time() + 360);
+      }
+    }
+  }
+  return $counts;
+}
