@@ -17,12 +17,14 @@ function custom_tokens_token_info() {
     'name' => t('Custom tokens'),
     'description' => t('Custom tokens.'),
   );
-  $webform_ids = custom_tokens_get_webform_ids();
-  foreach ($webform_ids as $webform_id) {
-    $info['tokens']['custom']['webform_submission_count_' . $webform_id] = array(
-      'name' => t('Webform submissions ' . $webform_id),
-      'description' => t('Number of webform submissions form id ' . $webform_id),
-    );
+  if (module_exists('webform')) {
+    $webform_ids = custom_tokens_get_webform_ids();
+    foreach ($webform_ids as $webform_id) {
+      $info['tokens']['custom']['webform_submission_count_' . $webform_id] = array(
+        'name' => t('Webform submissions ' . $webform_id),
+        'description' => t('Number of webform submissions form id ' . $webform_id),
+      );
+    }
   }
   return $info;
 }
@@ -56,11 +58,13 @@ function custom_tokens_tokens($type, $tokens, array $data = array(), array $opti
     }
     break;
   case 'custom':
-    $counts = custom_tokens_get_webform_submissions_counts(); 
-    foreach ($tokens as $name => $original) {
-      preg_match('/^webform_submission_count_([0-9]+)$/', $name, $matches);
-      if (!empty($matches[1]) && !empty($counts[$matches[1]])) {
-        $replacements[$original] = $counts[$matches[1]];
+    if (module_exists('webform')) {
+      $counts = custom_tokens_get_webform_submissions_counts(); 
+      foreach ($tokens as $name => $original) {
+        preg_match('/^webform_submission_count_([0-9]+)$/', $name, $matches);
+        if (!empty($matches[1]) && !empty($counts[$matches[1]])) {
+          $replacements[$original] = $counts[$matches[1]];
+        }
       }
     }
     break;
