@@ -26,6 +26,13 @@ function custom_tokens_token_info() {
       );
     }
   }
+  $groups = variable_get('custom_tokens_civi_groups', array());
+  foreach ($groups as $group_id) {
+    $info['tokens']['custom']['custom_tokens_civi_group_'.$group_id] = array(
+      'name' => t('Count civi group id ' . $group_id),
+    );
+  }
+
   return $info;
 }
 
@@ -58,13 +65,16 @@ function custom_tokens_tokens($type, $tokens, array $data = array(), array $opti
     }
     break;
   case 'custom':
-    if (module_exists('webform')) {
-      $counts = custom_tokens_get_webform_submissions_counts(); 
-      foreach ($tokens as $name => $original) {
-        preg_match('/^webform_submission_count_([0-9]+)$/', $name, $matches);
-        if (!empty($matches[1]) && !empty($counts[$matches[1]])) {
-          $replacements[$original] = $counts[$matches[1]];
-        }
+    $webform_counts = custom_tokens_get_webform_submissions_counts(); 
+    $group_counts = custom_tokens_get_group_counts(); 
+    foreach ($tokens as $name => $original) {
+      preg_match('/^webform_submission_count_([0-9]+)$/', $name, $matches);
+      if (!empty($matches[1]) && !empty($webform_counts[$matches[1]])) {
+        $replacements[$original] = $webform_counts[$matches[1]];
+      }
+      preg_match('/^custom_tokens_civi_group_([0-9]+)$/', $name, $matches);
+      if (!empty($matches[1]) && !empty($group_counts[$matches[1]])) {
+        $replacements[$original] = $group_counts[$matches[1]];
       }
     }
     break;
@@ -100,7 +110,7 @@ function custom_tokens_get_webform_ids() {
 function custom_tokens_get_webform_submissions_counts() {
   $counts = &drupal_static(__FUNCTION__);
   if (!isset($counts)) {
-    if ($cache = cache_get('custom_tokens_counts')) {
+    if ($cache = cache_get('custom_tokens_webform_counts')) {
       $counts = $cache->data;
     }
     else {
@@ -110,19 +120,59 @@ function custom_tokens_get_webform_submissions_counts() {
       foreach ($webform_ids as $webform_id) {
         $result = db_query($query, array(':nid' => $webform_id));
         $count = $result->fetchField(0);
-        if ($count > 100 && $count < 1000) {
-          $count = 10 * (floor($count/10));
-        }
-        else if ($count > 1000 && $count < 10000) {
-          $count = 100 * (floor($count/100));
-        }
-        else if ($count > 10000) {
-          $count = 1000 * (floor($count/1000));
-        }
-        $counts[$webform_id] = number_format($count, 0, ',', '.');
-        cache_set('custom_tokens_counts', $counts, 'cache', time() + 360);
+        $count = custom_tokens_round($count);
+        $counts[$webform_id] = $count;
       }
+      cache_set('custom_tokens_webform_counts', $counts, 'cache', time() + 360);
     }
   }
   return $counts;
+}
+
+function custom_tokens_get_group_counts() {
+  $counts = &drupal_static(__FUNCTION__);
+  if (!isset($counts)) {
+    if ($cache = cache_get('custom_tokens_group_counts')) {
+      $counts = $cache->data;
+    }
+    else {
+      $counts = array();
+      $groups = variable_get('custom_tokens_civi_groups', array());
+      $counts_stored = variable_get('custom_tokens_group_counts', array());
+      foreach ($groups as $group_id) {
+        set_time_limit(0);
+        $spcivi = \SPCivi::getInstance();
+        $params = array(
+          'group_id' => 2658,
+          'status' => 'Added',
+        );
+        $result = $spcivi->api('GroupContact', 'getcount', $params);
+        if (!isset($result['is_error']) || $result['is_error'] == 1) {
+          // Error, use stored value.
+          $counts[$group_id] = !empty($counts_stored[$group_id]) ? $counts_stored[$group_id] : 0;
+        }
+        else {
+          $count = $result['result'];
+          $count = custom_tokens_round($count);
+          $counts[$group_id] = $count;
+        }
+      }
+      variable_set('custom_tokens_group_counts', $counts);
+      cache_set('custom_tokens_group_counts', $counts, 'cache', time() + 360);
+    }
+  }
+  return $counts;
+}
+
+function custom_tokens_round($count) {
+  if ($count > 100 && $count < 1000) {
+    $count = 10 * (round($count/10));
+  }
+  else if ($count > 1000 && $count < 10000) {
+    $count = 100 * (round($count/100));
+  }
+  else if ($count > 10000) {
+    $count = 1000 * (round($count/1000));
+  }
+  return $count;
 }
