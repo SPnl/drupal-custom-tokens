@@ -174,5 +174,5 @@ function custom_tokens_round($count) {
   else if ($count > 10000) {
     $count = 1000 * (round($count/1000));
   }
-  return $count;
+  return number_format($count, 0, '', '.');
 }
