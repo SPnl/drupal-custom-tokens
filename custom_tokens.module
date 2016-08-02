@@ -26,11 +26,13 @@ function custom_tokens_token_info() {
       );
     }
   }
-  $groups = variable_get('custom_tokens_civi_groups', array());
-  foreach ($groups as $group_id) {
-    $info['tokens']['custom']['custom_tokens_civi_group_'.$group_id] = array(
-      'name' => t('Count civi group id ' . $group_id),
-    );
+  if (module_exists('spciviapi')) {
+    $groups = variable_get('custom_tokens_civi_groups', array());
+    foreach ($groups as $group_id) {
+      $info['tokens']['custom']['custom_tokens_civi_group_'.$group_id] = array(
+        'name' => t('Count civi group id ' . $group_id),
+      );
+    }
   }
 
   return $info;
