@@ -145,7 +145,7 @@ function custom_tokens_get_group_counts() {
         set_time_limit(0);
         $spcivi = \SPCivi::getInstance();
         $params = array(
-          'group_id' => 2658,
+          'group_id' => $group_id,
           'status' => 'Added',
         );
         $result = $spcivi->api('GroupContact', 'getcount', $params);
@@ -167,6 +167,7 @@ function custom_tokens_get_group_counts() {
 }
 
 function custom_tokens_round($count) {
+/*
   if ($count > 100 && $count < 1000) {
     $count = 10 * (floor($count/10));
   }
@@ -177,4 +178,6 @@ function custom_tokens_round($count) {
     $count = 1000 * (floor($count/1000));
   }
   return number_format($count, 0, '', '.');
+*/
+  return $count;
 }
