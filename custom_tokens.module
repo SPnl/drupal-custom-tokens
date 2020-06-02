@@ -145,10 +145,9 @@ function custom_tokens_get_group_counts() {
         set_time_limit(0);
         $spcivi = \SPCivi::getInstance();
         $params = array(
-          'group_id' => $group_id,
-          'status' => 'Added',
+          'group' => $group_id,
         );
-        $result = $spcivi->api('GroupContact', 'getcount', $params);
+        $result = $spcivi->api('Contact', 'getcount', $params);
         if (!isset($result['is_error']) || $result['is_error'] == 1) {
           // Error, use stored value.
           $counts[$group_id] = !empty($counts_stored[$group_id]) ? $counts_stored[$group_id] : 0;
