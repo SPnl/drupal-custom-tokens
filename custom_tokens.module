@@ -18,19 +18,19 @@ function custom_tokens_token_info() {
     'description' => t('Custom tokens.'),
   );
   if (module_exists('webform')) {
-    $webform_ids = custom_tokens_get_webform_ids();
-    foreach ($webform_ids as $webform_id) {
+    $webform_info = custom_tokens_get_webform_info();
+    foreach ($webform_info as $webform_id => $webform_info) {
       $info['tokens']['custom']['webform_submission_count_' . $webform_id] = array(
-        'name' => t('Webform submissions ' . $webform_id),
-        'description' => t('Number of webform submissions form id ' . $webform_id),
+        'name' => t('Count webform "' . $webform_info['title'] . '" (' . $webform_id . ')'),
       );
     }
   }
-  if (module_exists('spciviapi')) {
+  if (module_exists('procapi')) {
     $groups = variable_get('custom_tokens_civi_groups', array());
-    foreach ($groups as $group_id) {
-      $info['tokens']['custom']['custom_tokens_civi_group_'.$group_id] = array(
-        'name' => t('Count civi group id ' . $group_id),
+    $selection_list = procapi_selection_get_list();
+    foreach ($selection_list as $selection_info) {
+      $info['tokens']['custom']['custom_tokens_selection_'.$selection_info['id']] = array(
+        'name' => t('Count selection "' . $selection_info['name'] . '" (' . $selection_info['id'] . ')'),
       );
     }
   }
@@ -68,15 +68,15 @@ function custom_tokens_tokens($type, $tokens, array $data = array(), array $opti
     break;
   case 'custom':
     $webform_counts = custom_tokens_get_webform_submissions_counts(); 
-    $group_counts = custom_tokens_get_group_counts(); 
+    $selection_counts = custom_tokens_get_selection_counts();
     foreach ($tokens as $name => $original) {
       preg_match('/^webform_submission_count_([0-9]+)$/', $name, $matches);
       if (!empty($matches[1]) && !empty($webform_counts[$matches[1]])) {
         $replacements[$original] = $webform_counts[$matches[1]];
       }
-      preg_match('/^custom_tokens_civi_group_([0-9]+)$/', $name, $matches);
-      if (!empty($matches[1]) && !empty($group_counts[$matches[1]])) {
-        $replacements[$original] = $group_counts[$matches[1]];
+      preg_match('/^custom_tokens_selection_([0-9]+)$/', $name, $matches);
+      if (!empty($matches[1]) && !empty($selection_counts[$matches[1]])) {
+        $replacements[$original] = $selection_counts[$matches[1]];
       }
     }
     break;
@@ -84,15 +84,15 @@ function custom_tokens_tokens($type, $tokens, array $data = array(), array $opti
   return $replacements;
 }
 
-function custom_tokens_get_webform_ids() {
-  $webform_ids = &drupal_static(__FUNCTION__);
-  if (!isset($webform_ids)) {
+function custom_tokens_get_webform_info() {
+  $webform_info = &drupal_static(__FUNCTION__);
+  if (!isset($webform_info)) {
     if ($cache = cache_get('custom_tokens_webform_ids')) {
-      $webform_ids = $cache->data;
+      $webform_info = $cache->data;
     }
     else {
       $webform_node_types = webform_variable_get('webform_node_types');
-      $webform_ids = array();
+      $webform_info = array();
       $query = new EntityFieldQuery();
 
       $result = $query
@@ -101,12 +101,18 @@ function custom_tokens_get_webform_ids() {
         ->execute();
 
       if (!empty($result['node'])) {
-        $webform_ids = array_keys($result['node']);
-        cache_set('custom_tokens_webform_ids', $webform_ids, 'cache', time() + 360);
+        foreach ($result['node'] as $node_id => $values) {
+          $node = node_load($node_id);
+          $webform_info[$node_id] = array(
+            'nid' => $node->nid,
+            'title' => $node->title,
+          );
+        }
+        cache_set('custom_tokens_webform_ids', $webform_info, 'cache', time() + 360);
       }
     }
   }
-  return $webform_ids;
+  return $webform_info;
 }
 
 function custom_tokens_get_webform_submissions_counts() {
@@ -117,9 +123,9 @@ function custom_tokens_get_webform_submissions_counts() {
     }
     else {
       $counts = array();
-      $webform_ids = custom_tokens_get_webform_ids();
+      $webform_info = custom_tokens_get_webform_info();
       $query = "SELECT COUNT(*) FROM {webform_submissions} WHERE nid = :nid AND submitted IS NOT NULL";
-      foreach ($webform_ids as $webform_id) {
+      foreach ($webform_info as $webform_id => $info) {
         $result = db_query($query, array(':nid' => $webform_id));
         $count = $result->fetchField(0);
         $count = custom_tokens_round($count);
@@ -131,35 +137,19 @@ function custom_tokens_get_webform_submissions_counts() {
   return $counts;
 }
 
-function custom_tokens_get_group_counts() {
+function custom_tokens_get_selection_counts() {
   $counts = &drupal_static(__FUNCTION__);
   if (!isset($counts)) {
-    if ($cache = cache_get('custom_tokens_group_counts')) {
+    if ($cache = cache_get('custom_tokens_selection_counts')) {
       $counts = $cache->data;
     }
     else {
       $counts = array();
-      $groups = variable_get('custom_tokens_civi_groups', array());
-      $counts_stored = variable_get('custom_tokens_group_counts', array());
-      foreach ($groups as $group_id) {
-        set_time_limit(0);
-        $spcivi = \SPCivi::getInstance();
-        $params = array(
-          'group' => $group_id,
-        );
-        $result = $spcivi->api('Contact', 'getcount', $params);
-        if (!isset($result['is_error']) || $result['is_error'] == 1) {
-          // Error, use stored value.
-          $counts[$group_id] = !empty($counts_stored[$group_id]) ? $counts_stored[$group_id] : 0;
-        }
-        else {
-          $count = $result['result'];
-          $count = custom_tokens_round($count);
-          $counts[$group_id] = $count;
-        }
+      $selection_list = procapi_selection_get_list();
+      foreach ($selection_list as $selection_info) {
+        $counts[$selection_info['id']] = custom_tokens_round($selection_info['numberOfRelations']);
       }
-      variable_set('custom_tokens_group_counts', $counts);
-      cache_set('custom_tokens_group_counts', $counts, 'cache', time() + 360);
+      cache_set('custom_tokens_selection_counts', $counts, 'cache', time() + 360);
     }
   }
   return $counts;
