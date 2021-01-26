@@ -145,9 +145,12 @@ function custom_tokens_get_selection_counts() {
     }
     else {
       $counts = array();
-      $selection_list = procapi_selection_get_list();
-      foreach ($selection_list as $selection_info) {
-        $counts[$selection_info['id']] = custom_tokens_round($selection_info['numberOfRelations']);
+
+      if (module_exists('procapi')) {
+        $selection_list = procapi_selection_get_list();
+        foreach ($selection_list as $selection_info) {
+          $counts[$selection_info['id']] = custom_tokens_round($selection_info['numberOfRelations']);
+        }
       }
       cache_set('custom_tokens_selection_counts', $counts, 'cache', time() + 360);
     }
